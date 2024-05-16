@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:mongo="http://www.mulesoft.org/schema/mule/mongo" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/mongo http://www.mulesoft.org/schema/mule/mongo/current/mule-mongo.xsd">
+	<flow name="MONGODB-SAPI-GET-GAMES" doc:id="b1046c40-02f9-41d7-b1f6-7ac8e813c1ba" >
+		<ee:transform doc:name="set (query, sortby)" doc:id="abfaf612-e908-44e5-97a2-9ed739e0e85d" >
+			<ee:message >
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="query" ><![CDATA[%dw 2.0
+output text/plain
+
+var genres = attributes.queryParams.genres default ""
+var platforms = attributes.queryParams.platforms default ""
+var stores = attributes.queryParams.stores default ""
+var dates = attributes.queryParams.dates default ""
+
+fun splitQuery(text: String) = text  splitBy  ","
+
+fun getStores(text: String) = 
+    if(text != "")
+        "\$or": splitQuery(text) map ((item) -> 
+            "stores": trim(item)
+        )
+    else 
+       0
+    
+
+fun getPlatforms(text: String) =
+    if(text != "")
+        "\$or": splitQuery(text) map ((item) -> 
+            "platforms": trim(item)
+        )
+    else 
+        0
+    
+
+
+fun getGenres(text: String) =
+    if(text != "")
+        "\$or": splitQuery(text) map ((item) -> 
+            "genres": trim(item)
+        )
+    else 
+        0
+
+fun getDates(text: String) = 
+    if(text != "")
+        "\$or": [
+            "released": { "\$gte": splitQuery(text)[0], "\$lt": splitQuery(text)[1]}
+        ]
+    else 
+        0
+---
+
+
+if( (genres != "") or (platforms != "") or (stores != "") or (dates != "") )  
+   write(("\$and": {
+        "\$and": [ 
+            getStores(stores), 
+            getGenres(genres), 
+            getPlatforms(platforms),
+            getDates(dates)
+        ] 
+    }."\$and" filter ((item) -> item != 0)), "application/json") replace  '"\$gte"' with "\$gte" replace  '"\$lt"' with "\$lt" 
+else 
+    write("_id": {
+    '\$gte' : 0
+	}, "application/json") replace  '"\$gte"' with "\$gte"]]></ee:set-variable>
+				<ee:set-variable variableName="sortby" ><![CDATA[%dw 2.0
+output text/plain
+
+var ordering = attributes.queryParams.ordering default ""
+---
+if(ordering contains("-"))
+	"[{$(ordering[1 to -1]): DESC}]"
+else
+	if((not (ordering contains("-") )) and (not isEmpty(ordering)))
+		"[{$(ordering): ASC}]"
+	else
+		""]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<mongo:find-documents doc:name="Find documents" doc:id="14945bc5-5235-440e-b064-51fba05bb976" config-ref="MongoDB_Config" collectionName="${mongodb.collection}" fields=",">
+			<mongo:query ><![CDATA[#[vars.query]]]></mongo:query>
+			<mongo:sort-by ><![CDATA[#[vars.sortby]]]></mongo:sort-by>
+		</mongo:find-documents>
+		<ee:transform doc:name="[java] to JSON" doc:id="7dea4926-f077-4363-a275-c89e6e2820f0">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+			<ee:variables>
+			</ee:variables>
+		</ee:transform>
+	</flow>
+	<flow name="MONGODB-SAPI-POST-GAMES" doc:id="f463a67e-bf57-415a-8a37-71da2014bdc0" >
+		<mongo:insert-documents collectionName="${mongodb.collection}" doc:name="Insert documents" doc:id="7421af3a-363d-48c7-bf37-029f40b009b3" config-ref="MongoDB_Config">
+		</mongo:insert-documents>
+		<set-variable value="#[if(payload.items.successful contains true)&#10;	201&#10;else&#10;	200]" doc:name="httpStatus" doc:id="dd6ba680-bf18-40fe-8c96-9498b71d62a5" variableName="httpStatus" />
+		<ee:transform doc:name="[java] to JSON" doc:id="255ede0e-26f4-408d-b546-2192097b1757" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload.items map ( (item, index) -> 
+	{
+		"_id": item.payload."_id",
+		"name": item.payload.name,
+		"successful": item.successful,
+	}
+)]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<flow name="MONGODB-SAPI-GET-GAME-BY-ID" doc:id="c3516c30-2fc8-44dc-919f-612730d878d7">
+		<mongo:find-documents doc:name="Find documents" doc:id="063957a5-e78e-417f-83c3-f71a77174c7a" config-ref="MongoDB_Config" collectionName="${mongodb.collection}" fields=",">
+			<mongo:query ><![CDATA[#[%dw 2.0
+output text/plain
+---
+write({"_id": attributes.uriParams.'ID' as Number}, "application/json")]]]></mongo:query>
+		</mongo:find-documents>
+		<ee:transform doc:name="[java] to JSON" doc:id="89749a3e-77c9-4aff-be2a-7dace460c22f">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+payload
+]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<flow name="MONGODB-SAPI-DELETE-GAME-BY-ID" doc:id="6e45486e-a705-4b6d-95c5-518db097e1ad" >
+		<mongo:remove-documents doc:name="" doc:id="95207194-fd2d-46a4-ae5f-386f793f31f5" config-ref="MongoDB_Config" collectionName="${mongodb.collection}">
+			<mongo:query ><![CDATA[#[%dw 2.0
+output text/plain
+---
+write({"_id": attributes.uriParams.'ID' as Number}, "application/json")]]]></mongo:query>
+		</mongo:remove-documents>
+		<ee:transform doc:name="[java] to JSON" doc:id="74f39ed6-ad7a-4373-bedc-218a0b78d140" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"successfullOperations": payload
+}
+]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<flow name="MONGODB-SAPI-UPDATE-GAME-BY-ID" doc:id="10d31cf8-fa31-4850-b300-5c405d8f1cf4" >
+		<mongo:update-documents doc:name="Update documents" doc:id="3820ba2b-9488-4e9f-a663-b24db85c33d8" config-ref="MongoDB_Config" collectionName="${mongodb.collection}">
+			<mongo:query ><![CDATA[#[%dw 2.0
+output text/plain
+---
+write({"_id": attributes.uriParams.'ID' as Number}, "application/json")]]]></mongo:query>
+		</mongo:update-documents>
+		<ee:transform doc:name="[java] to JSON" doc:id="924f1de1-018b-4c2e-85a9-9adc1eeba9c3" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload
+]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+</mule>

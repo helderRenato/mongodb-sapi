@@ -1,0 +1,16 @@
+https: 
+  port: "8083"
+  host: "0.0.0.0"
+  basepath: "/"
+  keystore: 
+    type: "JKS"
+    path: "keystore/keystore-dev.jks"
+    alias: "keystore"
+    
+mongodb:
+  database: "VideoGames"
+  collection: "games"  
+  username: "videogameapi"
+  
+api:
+  id: "19477062"

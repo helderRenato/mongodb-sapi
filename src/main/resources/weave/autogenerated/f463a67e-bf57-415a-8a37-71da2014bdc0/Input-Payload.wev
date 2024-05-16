@@ -1,0 +1,11 @@
+%dw 2.0
+
+type auto_f463a67e_bf57_415a_8a37_71da2014bdc0_Input_Payload = {
+  next: String | Null, 
+  previous?: String | Null, 
+  count: Number, 
+  user_platforms: Boolean, 
+  results: Array<Any>, 
+  _?: Any
+}
+
